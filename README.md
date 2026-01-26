@@ -104,6 +104,12 @@ container run -d \
   browser:latest
 ```
 
+Flags are validated before being passed to Chromium:
+- Each flag must begin with `--`
+- Security-critical flags (`--no-sandbox`, `--disable-web-security`,
+  `--remote-debugging-port`, etc.) are blocked
+- Invalid JSON in the flags file is skipped with a warning
+
 ## Security
 
 CDP is an unauthenticated protocol — anyone who can reach the port gets full browser control (arbitrary JS execution, cookie access, file reads). By default, socat binds to `127.0.0.1`, so CDP is only reachable from inside the VM and from the host via `--publish`.

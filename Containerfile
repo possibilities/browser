@@ -24,6 +24,7 @@ RUN apt-get update && \
     netcat-openbsd \
     procps \
     socat \
+    jq \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 

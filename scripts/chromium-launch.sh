@@ -20,6 +20,34 @@ for i in $(seq 1 20); do
   sleep 0.1
 done
 
+# ---- Flag validation ---------------------------------------------------------
+BLOCKED_FLAG_PREFIXES=(
+  --no-sandbox
+  --disable-web-security
+  --disable-setuid-sandbox
+  --allow-running-insecure-content
+  --remote-debugging-port
+  --remote-debugging-address
+  --user-data-dir
+  --remote-allow-origins
+)
+
+validate_flag() {
+  local flag="$1"
+  if [[ "$flag" != --* ]]; then
+    echo "[chromium-launch] WARNING: Rejected flag (missing -- prefix): $flag" >&2
+    return 1
+  fi
+  local key="${flag%%=*}"
+  for blocked in "${BLOCKED_FLAG_PREFIXES[@]}"; do
+    if [ "$key" = "$blocked" ]; then
+      echo "[chromium-launch] WARNING: Rejected blocked flag: $flag" >&2
+      return 1
+    fi
+  done
+  return 0
+}
+
 # ---- Build flag list --------------------------------------------------------
 # Hard-coded flags (always present)
 FLAGS=(
@@ -38,21 +66,18 @@ FLAGS=(
 # Merge flags from CHROMIUM_FLAGS environment variable
 if [ -n "${CHROMIUM_FLAGS:-}" ]; then
   read -ra ENV_FLAGS <<< "$CHROMIUM_FLAGS"
-  FLAGS+=("${ENV_FLAGS[@]}")
+  for env_flag in "${ENV_FLAGS[@]}"; do
+    validate_flag "$env_flag" && FLAGS+=("$env_flag")
+  done
 fi
 
 # Merge flags from runtime flags file (JSON: { "flags": ["--flag1", "--flag2"] })
 if [ -f "$RUNTIME_FLAGS_PATH" ]; then
-  CONTENT=$(cat "$RUNTIME_FLAGS_PATH")
-  if [ -n "$CONTENT" ]; then
-    # Parse JSON flags array using sed/grep (no jq dependency)
-    # Extracts strings between quotes from the "flags" array
-    FILE_FLAGS=$(echo "$CONTENT" | \
-      sed -n 's/.*"flags"\s*:\s*\[\(.*\)\].*/\1/p' | \
-      tr ',' '\n' | \
-      sed -n 's/.*"\([^"]*\)".*/\1/p')
+  if ! FILE_FLAGS=$(jq -r '.flags[]? // empty' "$RUNTIME_FLAGS_PATH" 2>/dev/null); then
+    echo "[chromium-launch] WARNING: Failed to parse $RUNTIME_FLAGS_PATH, skipping." >&2
+  else
     while IFS= read -r flag; do
-      [ -n "$flag" ] && FLAGS+=("$flag")
+      [ -n "$flag" ] && validate_flag "$flag" && FLAGS+=("$flag")
     done <<< "$FILE_FLAGS"
   fi
 fi
