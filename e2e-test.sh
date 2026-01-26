@@ -18,7 +18,7 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 readonly PREFIX="e2e-browser-test"          # container name prefix (won't collide with normal use)
-readonly IMAGE="browser:latest"
+readonly IMAGE="browser:test-latest"
 readonly BASE_PORT=19222                    # host ports start here (well above the default 9222)
 readonly CONTAINER_CPUS=4
 readonly CONTAINER_MEMORY="4G"
@@ -51,6 +51,8 @@ cleanup() {
         container stop "$name"   2>/dev/null || true
         container delete "$name" 2>/dev/null || true
     done
+    log "Removing test image ${IMAGE} …"
+    container image remove "$IMAGE" 2>/dev/null || true
     log "Cleanup complete."
 }
 trap cleanup EXIT
@@ -60,6 +62,13 @@ trap cleanup EXIT
 # ---------------------------------------------------------------------------
 log "Pre-run cleanup of any leftover test containers …"
 cleanup  # trap is already set, so this is safe to call directly
+
+# ---------------------------------------------------------------------------
+# Rebuild the container image
+# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+log "Building container image ${IMAGE} …"
+container build -t "$IMAGE" "$SCRIPT_DIR"
 
 # ---------------------------------------------------------------------------
 # Start containers
