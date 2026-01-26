@@ -5,6 +5,7 @@ SUPERVISORD_CONF="/etc/supervisor/supervisord.conf"
 WAYLAND_SOCKET_PATH="/run/user/1000/wayland-0"
 CDP_PORT="${CDP_PORT:-9222}"
 CDP_INTERNAL_PORT="${CDP_INTERNAL_PORT:-9221}"
+CDP_BIND_ADDRESS="${CDP_BIND_ADDRESS:-127.0.0.1}"
 
 # ---- helpers ----------------------------------------------------------------
 log() { echo "[entrypoint] $*"; }
@@ -83,7 +84,7 @@ supervisorctl -c "$SUPERVISORD_CONF" start chromium
 wait_for_port "$CDP_INTERNAL_PORT" "Chromium CDP (internal)" 100
 
 # ---- start socat (CDP port forwarder) ----------------------------------------
-log "Starting socat (forwarding 0.0.0.0:$CDP_PORT -> 127.0.0.1:$CDP_INTERNAL_PORT)..."
+log "Starting socat (forwarding $CDP_BIND_ADDRESS:$CDP_PORT -> 127.0.0.1:$CDP_INTERNAL_PORT)..."
 supervisorctl -c "$SUPERVISORD_CONF" start socat
 wait_for_port "$CDP_PORT" "CDP forwarder" 30
 

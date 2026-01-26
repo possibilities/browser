@@ -12,10 +12,11 @@ apple/container micro-VM (arm64, Debian bookworm)
 └── supervisord
     ├── D-Bus system daemon
     ├── Mutter --wayland --headless --virtual-monitor 1920x1080
-    └── Chromium --ozone-platform=wayland --remote-debugging-port=9222
+    ├── Chromium --remote-debugging-port=9221 (internal, localhost only)
+    └── socat (forwards CDP_BIND_ADDRESS:9222 → 127.0.0.1:9221)
 ```
 
-Startup order: D-Bus → Mutter (wait for Wayland socket) → Chromium (wait for CDP port).
+Startup order: D-Bus → Mutter (wait for Wayland socket) → Chromium (wait for internal CDP port) → socat.
 
 ## Requirements
 
@@ -83,6 +84,7 @@ curl http://127.0.0.1:19222/json/version
 | `WIDTH` | `1920` | Virtual monitor width |
 | `HEIGHT` | `1080` | Virtual monitor height |
 | `CDP_PORT` | `9222` | Chrome DevTools Protocol port |
+| `CDP_BIND_ADDRESS` | `127.0.0.1` | Address socat binds to for CDP (see [Security](#security)) |
 | `CHROMIUM_FLAGS` | _(empty)_ | Additional Chromium flags (space-separated) |
 
 ### Runtime Flag Overlay
@@ -99,6 +101,22 @@ container run -d \
   --publish 9222:9222 \
   --tmpfs /dev/shm \
   -v /path/to/flags:/chromium/flags:ro \
+  browser:latest
+```
+
+## Security
+
+CDP is an unauthenticated protocol — anyone who can reach the port gets full browser control (arbitrary JS execution, cookie access, file reads). By default, socat binds to `127.0.0.1`, so CDP is only reachable from inside the VM and from the host via `--publish`.
+
+**Do not set `CDP_BIND_ADDRESS=0.0.0.0` unless you understand the risk.** Binding to all interfaces exposes CDP to every peer on the network. If you need remote access, put an authenticating reverse proxy in front of the CDP port.
+
+```bash
+# Override bind address (NOT recommended for production)
+container run -d \
+  --name browser \
+  -e CDP_BIND_ADDRESS=0.0.0.0 \
+  --publish 9222:9222 \
+  --tmpfs /dev/shm \
   browser:latest
 ```
 
