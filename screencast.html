@@ -14,6 +14,7 @@
       height: 100vh;
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, "SF Mono", Menlo, monospace;
+      color: #ccc;
     }
     #screencast {
       max-width: 100vw;
@@ -25,7 +26,6 @@
       position: fixed;
       top: 12px;
       left: 12px;
-      color: #888;
       font-size: 13px;
       background: rgba(0, 0, 0, 0.75);
       padding: 8px 12px;
@@ -39,8 +39,76 @@
     #overlay.error { color: #f66; }
     #overlay.streaming { opacity: 0; }
     #overlay.streaming:hover { opacity: 1; }
+
+    #fallback {
+      display: none;
+      max-width: 520px;
+      padding: 32px;
+      text-align: center;
+    }
+    #fallback h1 {
+      color: #fff;
+      font-size: 18px;
+      font-weight: 500;
+      margin-bottom: 20px;
+    }
+    #fallback p {
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 14px;
+      color: #999;
+    }
+    #fallback .cmd-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 20px;
+    }
+    #fallback .cmd-row code {
+      flex: 1;
+      text-align: left;
+      font-size: 13px;
+      color: #ddd;
+      user-select: all;
+    }
+    #fallback .cmd-row button {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #ccc;
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    #fallback .cmd-row button:hover { background: rgba(255, 255, 255, 0.15); }
+    #fallback textarea {
+      width: 100%;
+      height: 80px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      color: #ddd;
+      font-family: inherit;
+      font-size: 13px;
+      padding: 10px 14px;
+      resize: vertical;
+      outline: none;
+      margin-bottom: 6px;
+    }
+    #fallback textarea:focus { border-color: rgba(255, 255, 255, 0.25); }
+    #fallback textarea::placeholder { color: #555; }
+    #fallback .hint { font-size: 12px; color: #666; margin-top: 0; }
+    #fallback .error-detail { color: #f66; font-size: 13px; }
+
     #setup {
-      color: #aaa;
+      display: none;
+      color: #888;
       text-align: center;
       max-width: 500px;
       padding: 24px;
@@ -58,32 +126,52 @@
 <body>
   <div id="overlay">Connecting...</div>
   <img id="screencast" />
-  <div id="setup" style="display:none">
+
+  <div id="setup">
     <h1>CDP Screencast</h1>
     <p>Stream live video from a Chrome DevTools Protocol endpoint.</p>
     <p>Add <code>?port=9222</code> to the URL to connect.</p>
     <p>Options: <code>host</code>, <code>port</code>, <code>format</code> (jpeg|png), <code>quality</code> (0-100)</p>
   </div>
 
+  <div id="fallback">
+    <h1>CDP Screencast</h1>
+    <p class="error-detail" id="fallback-error"></p>
+    <p>Run this command and paste the output below:</p>
+    <div class="cmd-row">
+      <code id="curl-cmd"></code>
+      <button id="copy-btn">Copy</button>
+    </div>
+    <textarea id="paste-area" placeholder="Paste curl output or a ws:// URL here..." spellcheck="false"></textarea>
+    <p class="hint">Accepts JSON from /json or a ws:// URL</p>
+  </div>
+
   <script>
     const params = new URLSearchParams(location.search);
     const host = params.get("host") || "localhost";
     const port = params.get("port");
+    const wsParam = params.get("ws");
     const format = params.get("format") || "jpeg";
     const quality = parseInt(params.get("quality") || "80", 10);
 
     const overlay = document.getElementById("overlay");
     const img = document.getElementById("screencast");
-    const setup = document.getElementById("setup");
+    const setupEl = document.getElementById("setup");
+    const fallbackEl = document.getElementById("fallback");
+    const fallbackError = document.getElementById("fallback-error");
+    const curlCmd = document.getElementById("curl-cmd");
+    const copyBtn = document.getElementById("copy-btn");
+    const pasteArea = document.getElementById("paste-area");
 
     function status(msg, cls) {
       overlay.textContent = msg;
       overlay.className = cls || "";
     }
 
-    if (!port) {
+    // No port and no ws URL: show usage
+    if (!port && !wsParam) {
       overlay.style.display = "none";
-      setup.style.display = "block";
+      setupEl.style.display = "block";
       throw new Error("No port specified");
     }
 
@@ -93,21 +181,9 @@
     let lastFrameTime = 0;
     let fps = 0;
 
-    async function getPageWsUrl() {
-      const res = await fetch(`http://${host}:${port}/json`);
-      const targets = await res.json();
-      const page = targets.find(t => t.type === "page");
-      if (!page) throw new Error("No page target found");
-
-      // Rewrite the WebSocket URL to use our host:port since the
-      // internal URL may reference 127.0.0.1 on a different port.
-      const wsPath = new URL(page.webSocketDebuggerUrl).pathname;
-      return `ws://${host}:${port}${wsPath}`;
-    }
-
-    function send(method, params, sessionId) {
+    function send(method, cdpParams, sessionId) {
       const id = ++msgId;
-      const msg = { id, method, params: params || {} };
+      const msg = { id, method, params: cdpParams || {} };
       if (sessionId) msg.sessionId = sessionId;
       ws.send(JSON.stringify(msg));
       return id;
@@ -117,42 +193,39 @@
       const now = performance.now();
       if (lastFrameTime > 0) {
         const delta = now - lastFrameTime;
-        fps = fps * 0.9 + (1000 / delta) * 0.1; // EMA
+        fps = fps * 0.9 + (1000 / delta) * 0.1;
       }
       lastFrameTime = now;
     }
 
-    async function connect() {
-      status("Fetching targets...");
+    function handleFrame(frameParams, sessionId) {
+      frameCount++;
+      updateFps();
 
-      let wsUrl;
-      try {
-        wsUrl = await getPageWsUrl();
-      } catch (e) {
-        // Fallback: try browser-level WebSocket and use Target domain
-        status("Fetching browser endpoint...");
-        try {
-          const res = await fetch(`http://${host}:${port}/json/version`);
-          const info = await res.json();
-          const wsPath = new URL(info.webSocketDebuggerUrl).pathname;
-          wsUrl = `ws://${host}:${port}${wsPath}`;
-          return connectBrowser(wsUrl);
-        } catch (e2) {
-          status(`Cannot reach CDP at ${host}:${port}`, "error");
-          return;
-        }
-      }
+      img.src = `data:image/${format};base64,${frameParams.data}`;
+      img.style.display = "block";
+      fallbackEl.style.display = "none";
 
-      status(`Connecting to page...`);
+      send("Page.screencastFrameAck", {
+        sessionId: frameParams.sessionId,
+      }, sessionId);
+
+      const meta = frameParams.metadata;
+      status(
+        `${meta.deviceWidth}x${meta.deviceHeight} @ ${Math.round(fps)} fps (frame ${frameCount})`,
+        "streaming"
+      );
+    }
+
+    // ── Page-level WebSocket connection ──────────────────────────
+
+    function connectPage(wsUrl) {
+      status("Connecting to page...");
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         status("Starting screencast...", "connected");
-        send("Page.startScreencast", {
-          format,
-          quality,
-          everyNthFrame: 1,
-        });
+        send("Page.startScreencast", { format, quality, everyNthFrame: 1 });
       };
 
       ws.onmessage = (event) => {
@@ -166,12 +239,16 @@
       ws.onclose = () => {
         status("Disconnected. Reconnecting...", "error");
         img.style.display = "none";
+        frameCount = 0;
+        fps = 0;
+        lastFrameTime = 0;
         setTimeout(connect, 2000);
       };
     }
 
-    async function connectBrowser(wsUrl) {
-      // Browser-level connection: attach to a page target via Target domain
+    // ── Browser-level WebSocket connection (Target domain) ──────
+
+    function connectBrowser(wsUrl) {
       status("Connecting to browser...");
       ws = new WebSocket(wsUrl);
 
@@ -200,14 +277,9 @@
         if (msg.result && msg.result.sessionId) {
           sessionId = msg.result.sessionId;
           status("Starting screencast...", "connected");
-          send("Page.startScreencast", {
-            format,
-            quality,
-            everyNthFrame: 1,
-          }, sessionId);
+          send("Page.startScreencast", { format, quality, everyNthFrame: 1 }, sessionId);
         }
 
-        // Flattened session events arrive with a sessionId field
         if (msg.method === "Page.screencastFrame") {
           handleFrame(msg.params, msg.sessionId);
         }
@@ -217,28 +289,124 @@
       ws.onclose = () => {
         status("Disconnected. Reconnecting...", "error");
         img.style.display = "none";
+        frameCount = 0;
+        fps = 0;
+        lastFrameTime = 0;
         setTimeout(connect, 2000);
       };
     }
 
-    function handleFrame(params, sessionId) {
-      frameCount++;
-      updateFps();
+    // ── Rewrite a WS URL to use the external host:port ─────────
 
-      img.src = `data:image/${format};base64,${params.data}`;
-      img.style.display = "block";
+    function rewriteWsUrl(rawUrl) {
+      const parsed = new URL(rawUrl);
+      return `ws://${host}:${port}${parsed.pathname}`;
+    }
 
-      // Acknowledge frame so the browser sends the next one
-      send("Page.screencastFrameAck", {
-        sessionId: params.sessionId,
-      }, sessionId);
+    // ── Connect from JSON targets array ─────────────────────────
 
-      const meta = params.metadata;
-      status(
-        `${meta.deviceWidth}x${meta.deviceHeight} ` +
-        `@ ${Math.round(fps)} fps ` +
-        `(frame ${frameCount})`,
-        "streaming"
+    function connectFromTargets(targets) {
+      const page = targets.find(t => t.type === "page");
+      if (!page || !page.webSocketDebuggerUrl) {
+        status("No page target found", "error");
+        return;
+      }
+      connectPage(rewriteWsUrl(page.webSocketDebuggerUrl));
+    }
+
+    // ── Parse pasted content (JSON array or ws:// URL) ──────────
+
+    function parsePastedContent(text) {
+      text = text.trim();
+      if (text.startsWith("ws://") || text.startsWith("wss://")) {
+        return { type: "ws", url: text };
+      }
+      try {
+        const parsed = JSON.parse(text);
+        const targets = Array.isArray(parsed) ? parsed : [parsed];
+        const page = targets.find(t => t.type === "page" && t.webSocketDebuggerUrl);
+        if (page) return { type: "targets", targets };
+
+        // Maybe it's /json/version output
+        if (parsed.webSocketDebuggerUrl) {
+          return { type: "browser", url: parsed.webSocketDebuggerUrl };
+        }
+      } catch {}
+      return null;
+    }
+
+    // ── Fallback UI ─────────────────────────────────────────────
+
+    function showFallback(errorMsg) {
+      overlay.style.display = "none";
+      fallbackEl.style.display = "block";
+      fallbackError.textContent = errorMsg;
+
+      const cmd = `curl -s http://${host}:${port}/json`;
+      curlCmd.textContent = cmd;
+
+      copyBtn.onclick = () => {
+        navigator.clipboard.writeText(cmd).then(() => {
+          copyBtn.textContent = "Copied";
+          setTimeout(() => copyBtn.textContent = "Copy", 1500);
+        });
+      };
+
+      pasteArea.oninput = () => {
+        const result = parsePastedContent(pasteArea.value);
+        if (!result) return;
+
+        fallbackEl.style.display = "none";
+        overlay.style.display = "block";
+
+        if (result.type === "ws") {
+          connectPage(result.url);
+        } else if (result.type === "targets") {
+          connectFromTargets(result.targets);
+        } else if (result.type === "browser") {
+          connectBrowser(rewriteWsUrl(result.url));
+        }
+      };
+    }
+
+    // ── Main entry point ────────────────────────────────────────
+
+    async function connect() {
+      // Direct WS URL provided: skip discovery
+      if (wsParam) {
+        if (wsParam.includes("/devtools/browser/")) {
+          connectBrowser(wsParam);
+        } else {
+          connectPage(wsParam);
+        }
+        return;
+      }
+
+      // Try HTTP discovery (works when same-origin or CORS allowed)
+      status("Discovering targets...");
+      try {
+        const res = await fetch(`http://${host}:${port}/json`);
+        const targets = await res.json();
+        connectFromTargets(targets);
+        return;
+      } catch (e) {
+        // CORS or network error — fall through
+      }
+
+      // Try /json/version for browser-level WS URL
+      try {
+        const res = await fetch(`http://${host}:${port}/json/version`);
+        const info = await res.json();
+        const wsPath = new URL(info.webSocketDebuggerUrl).pathname;
+        connectBrowser(`ws://${host}:${port}${wsPath}`);
+        return;
+      } catch (e) {
+        // CORS or network error — fall through
+      }
+
+      // Show manual fallback
+      showFallback(
+        `Cannot auto-discover targets (CORS blocks HTTP to ${host}:${port}).`
       );
     }
 
