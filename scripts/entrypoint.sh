@@ -5,7 +5,7 @@ log() { echo "[entrypoint] $*"; }
 
 # ---- directory setup --------------------------------------------------------
 log "Ensuring runtime directories..."
-mkdir -p /run/user/1000 /run/dbus /var/log/supervisord /home/browser/user-data
+mkdir -p /run/user/1000 /var/log/supervisord /home/browser/user-data
 chown browser:browser /run/user/1000 /home/browser/user-data
 chmod 700 /run/user/1000
 

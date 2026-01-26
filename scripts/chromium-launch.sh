@@ -99,7 +99,7 @@ echo "CHROMIUM_FLAGS: ${UNIQUE_FLAGS[*]}"
 # ---- Set up Wayland environment ---------------------------------------------
 export XDG_RUNTIME_DIR=/run/user/1000
 export WAYLAND_DISPLAY=wayland-0
-export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
+export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 export XDG_CONFIG_HOME=/home/browser/.config
 export XDG_CACHE_HOME=/home/browser/.cache
 export HOME=/home/browser

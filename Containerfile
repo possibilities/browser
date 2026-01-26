@@ -8,7 +8,7 @@ RUN apt-get update && \
     # Wayland compositor (Mutter 43 requires XWayland)
     mutter \
     xwayland \
-    # System bus (required by Mutter and Chromium)
+    # Session bus (required by Mutter and Chromium)
     dbus \
     # Browser
     chromium \
@@ -34,7 +34,6 @@ RUN useradd -m -s /bin/bash -u 1000 browser
 # Pre-create runtime directories
 RUN mkdir -p \
     /run/user/1000 \
-    /run/dbus \
     /home/browser/user-data \
     /home/browser/.config/chromium \
     /home/browser/.pki/nssdb \
@@ -46,8 +45,8 @@ RUN mkdir -p \
     && chmod 700 /run/user/1000 \
     && chmod 1777 /tmp/.X11-unix
 
-# Custom D-Bus config (avoids capability dropping unsupported in apple/container VMs)
-COPY configs/dbus-system.conf /etc/dbus-1/container-system.conf
+# Custom D-Bus session bus config (avoids capability dropping unsupported in apple/container VMs)
+COPY configs/dbus-session.conf /etc/dbus-1/container-session.conf
 
 # Chromium managed policy (anti-detection settings)
 RUN mkdir -p /etc/chromium/policies/managed
