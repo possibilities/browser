@@ -29,4 +29,4 @@ COPY interactive/services/pipewire.conf /etc/supervisor/conf.d/services/pipewire
 COPY interactive/services/wireplumber.conf /etc/supervisor/conf.d/services/wireplumber.conf
 COPY interactive/services/gnome-remote-desktop.conf /etc/supervisor/conf.d/services/gnome-remote-desktop.conf
 
-EXPOSE 5900 3389
+EXPOSE 3389

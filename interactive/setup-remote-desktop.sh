@@ -2,10 +2,10 @@
 # setup-remote-desktop.sh — Build-time configuration for gnome-remote-desktop.
 #
 # Creates dconf settings, self-signed TLS certificates for RDP, and
-# credential files for VNC/RDP authentication.  Runs during container
+# credential files for RDP authentication.  Runs during container
 # image build (not at runtime).
 #
-# Default credentials:  VNC password "browser"  /  RDP user "browser" password "browser"
+# Default credentials:  RDP user "browser" password "browser"
 set -euo pipefail
 
 GRD_DIR="/home/browser/.local/share/gnome-remote-desktop"
@@ -33,11 +33,6 @@ system-db:local
 PROFILE
 
 cat > /etc/dconf/db/local.d/remote-desktop <<'DCONF'
-[org/gnome/desktop/remote-desktop/vnc]
-enable=true
-view-only=false
-auth-method='password'
-
 [org/gnome/desktop/remote-desktop/rdp]
 enable=true
 view-only=false
@@ -50,16 +45,13 @@ dconf update
 # ---------------------------------------------------------------------------
 # Credentials — GKeyFile fallback (no GNOME Keyring / TPM in container)
 # ---------------------------------------------------------------------------
-# VNC password: "browser" (base64: YnJvd3Nlcg==)
+# The headless daemon reads credentials.ini (not grd-credentials.ini)
+# using GVariant format for the values.
 # RDP: username "browser", password "browser"
-cat > "$GRD_DIR/grd-credentials.ini" <<'CREDS'
-[VNC]
-password=YnJvd3Nlcg==
-
+cat > "$GRD_DIR/credentials.ini" <<'CREDS'
 [RDP]
-username=browser
-password=YnJvd3Nlcg==
+credentials={'username': <'browser'>, 'password': <'browser'>}
 CREDS
 
-chown browser:browser "$GRD_DIR/grd-credentials.ini"
-chmod 600 "$GRD_DIR/grd-credentials.ini"
+chown browser:browser "$GRD_DIR/credentials.ini"
+chmod 600 "$GRD_DIR/credentials.ini"
