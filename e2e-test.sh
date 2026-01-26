@@ -3,7 +3,7 @@
 # e2e-test.sh — End-to-end test for the browser container.
 #
 # Tests both the base image (browser) and the interactive image
-# (browser-interactive with RDP via gnome-remote-desktop).
+# (browser-rdp with RDP via gnome-remote-desktop).
 #
 # Starts one or more containers of each type, verifies that Chromium's
 # CDP endpoint comes up, verifies the RDP port on interactive
@@ -24,7 +24,7 @@ set -euo pipefail
 readonly BASE_PREFIX="e2e-browser-test"
 readonly INTERACTIVE_PREFIX="e2e-interactive-test"
 readonly BASE_IMAGE="browser:test-latest"
-readonly INTERACTIVE_IMAGE="browser-interactive:test-latest"
+readonly INTERACTIVE_IMAGE="browser-rdp:test-latest"
 
 readonly BASE_CDP_PORT=19222                   # base container CDP ports start here
 readonly INTERACTIVE_CDP_PORT=19322            # interactive container CDP ports start here
@@ -81,7 +81,7 @@ log "Building base image ${BASE_IMAGE} …"
 container build -t "$BASE_IMAGE" "$SCRIPT_DIR"
 
 log "Building interactive image ${INTERACTIVE_IMAGE} …"
-container build -f "$SCRIPT_DIR/Containerfile.interactive" \
+container build -f "$SCRIPT_DIR/Containerfile.rdp" \
     --build-arg BASE_IMAGE="$BASE_IMAGE" \
     -t "$INTERACTIVE_IMAGE" "$SCRIPT_DIR"
 
