@@ -3,7 +3,9 @@ set -e
 
 USER_DATA_DIR="/home/browser/user-data"
 RUNTIME_FLAGS_PATH="${RUNTIME_FLAGS_PATH:-/chromium/flags}"
-CDP_PORT="${CDP_PORT:-9222}"
+# Chromium binds to 127.0.0.1 only (Debian ignores --remote-debugging-address).
+# socat handles forwarding from 0.0.0.0:CDP_PORT to this internal port.
+CDP_INTERNAL_PORT="${CDP_INTERNAL_PORT:-9221}"
 
 # ---- Clean up stale lock files from previous SIGKILL termination ------------
 rm -f "$USER_DATA_DIR/SingletonLock" \
@@ -22,8 +24,7 @@ done
 # Hard-coded flags (always present)
 FLAGS=(
   --ozone-platform=wayland
-  --remote-debugging-address=0.0.0.0
-  --remote-debugging-port="$CDP_PORT"
+  --remote-debugging-port="$CDP_INTERNAL_PORT"
   --remote-allow-origins=*
   --user-data-dir="$USER_DATA_DIR"
   --password-store=basic

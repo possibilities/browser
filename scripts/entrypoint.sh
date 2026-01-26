@@ -4,6 +4,7 @@ set -e
 SUPERVISORD_CONF="/etc/supervisor/supervisord.conf"
 WAYLAND_SOCKET_PATH="/run/user/1000/wayland-0"
 CDP_PORT="${CDP_PORT:-9222}"
+CDP_INTERNAL_PORT="${CDP_INTERNAL_PORT:-9221}"
 
 # ---- helpers ----------------------------------------------------------------
 log() { echo "[entrypoint] $*"; }
@@ -53,6 +54,7 @@ chmod 700 /run/user/1000
 # ---- cleanup handler --------------------------------------------------------
 cleanup() {
   log "Shutting down..."
+  supervisorctl -c "$SUPERVISORD_CONF" stop socat || true
   supervisorctl -c "$SUPERVISORD_CONF" stop chromium || true
   supervisorctl -c "$SUPERVISORD_CONF" stop mutter || true
   supervisorctl -c "$SUPERVISORD_CONF" stop dbus || true
@@ -78,9 +80,16 @@ wait_for_socket "$WAYLAND_SOCKET_PATH" "Wayland compositor" 60
 # ---- start Chromium ----------------------------------------------------------
 log "Starting Chromium..."
 supervisorctl -c "$SUPERVISORD_CONF" start chromium
-wait_for_port "$CDP_PORT" "Chromium CDP" 100
+wait_for_port "$CDP_INTERNAL_PORT" "Chromium CDP (internal)" 100
+
+# ---- start socat (CDP port forwarder) ----------------------------------------
+log "Starting socat (forwarding 0.0.0.0:$CDP_PORT -> 127.0.0.1:$CDP_INTERNAL_PORT)..."
+supervisorctl -c "$SUPERVISORD_CONF" start socat
+wait_for_port "$CDP_PORT" "CDP forwarder" 30
 
 log "All services ready. CDP available on port $CDP_PORT."
 
-# Keep the container alive
-wait
+# Keep the container alive (supervisord forks, so `wait` would exit immediately)
+sleep infinity &
+SLEEP_PID=$!
+wait $SLEEP_PID

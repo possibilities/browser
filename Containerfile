@@ -5,8 +5,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install all runtime dependencies in a single layer
 RUN apt-get update && \
     apt-get -y --no-install-recommends install \
-    # Wayland compositor
+    # Wayland compositor (Mutter 43 requires XWayland)
     mutter \
+    xwayland \
     # System bus (required by Mutter and Chromium)
     dbus \
     # Browser
@@ -19,9 +20,10 @@ RUN apt-get update && \
     fonts-noto-color-emoji \
     fonts-nanum \
     fontconfig \
-    # Utilities for readiness checks and process management
+    # Utilities for readiness checks, process management, and port forwarding
     netcat-openbsd \
     procps \
+    socat \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
@@ -38,8 +40,10 @@ RUN mkdir -p \
     /home/browser/.cache/dconf \
     /var/log/supervisord \
     /chromium \
+    /tmp/.X11-unix \
     && chown -R browser:browser /run/user/1000 /home/browser \
-    && chmod 700 /run/user/1000
+    && chmod 700 /run/user/1000 \
+    && chmod 1777 /tmp/.X11-unix
 
 # Custom D-Bus config (avoids capability dropping unsupported in apple/container VMs)
 COPY configs/dbus-system.conf /etc/dbus-1/container-system.conf
@@ -64,6 +68,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/chromium-launch.sh
 ENV WIDTH=1920
 ENV HEIGHT=1080
 ENV CDP_PORT=9222
+ENV CDP_INTERNAL_PORT=9221
 
 EXPOSE 9222
 
