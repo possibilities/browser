@@ -9,6 +9,9 @@ mkdir -p /run/user/1000 /var/log/supervisord /home/browser/user-data
 chown browser:browser /run/user/1000 /home/browser/user-data
 chmod 700 /run/user/1000
 
+# ---- fix /dev/fuse permissions for gnome-remote-desktop clipboard ----------
+chmod 666 /dev/fuse 2>/dev/null || true
+
 # ---- rebuild font cache for runtime-mounted fonts --------------------------
 log "Rebuilding font cache..."
 fc-cache -f
