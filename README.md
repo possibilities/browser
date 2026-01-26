@@ -8,15 +8,15 @@ Uses Mutter as a headless Wayland compositor -- no X11 stack. Preserves anti-det
 
 ```
 apple/container micro-VM (arm64, Debian bookworm)
-├── entrypoint.sh (orchestrator)
-└── supervisord
-    ├── D-Bus system daemon
+├── entrypoint.sh (bootstrap → exec supervisord)
+└── supervisord (PID 1)
+    ├── D-Bus session daemon
     ├── Mutter --wayland --headless --virtual-monitor 1920x1080
     ├── Chromium --remote-debugging-port=9221 (internal, localhost only)
     └── socat (forwards CDP_BIND_ADDRESS:9222 → 127.0.0.1:9221)
 ```
 
-Startup order: D-Bus → Mutter (wait for Wayland socket) → Chromium (wait for internal CDP port) → socat.
+Startup order: D-Bus → Mutter (wait for D-Bus session socket) → Chromium (wait for Wayland socket) → socat (wait for internal CDP port).
 
 ## Requirements
 
