@@ -60,6 +60,20 @@ container run -d \
 curl http://127.0.0.1:9222/json/version
 ```
 
+If port 9222 is already in use on the host (e.g., by Docker), change the host port:
+
+```bash
+container run -d \
+  --name browser \
+  --cpus 4 \
+  --memory 4G \
+  --publish 19222:9222 \
+  --tmpfs /dev/shm \
+  browser:latest
+
+curl http://127.0.0.1:19222/json/version
+```
+
 ## Configuration
 
 ### Environment Variables
