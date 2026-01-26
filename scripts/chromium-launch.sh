@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 USER_DATA_DIR="/home/browser/user-data"
 RUNTIME_FLAGS_PATH="${RUNTIME_FLAGS_PATH:-/chromium/flags}"
@@ -78,6 +78,19 @@ export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/dbus/system_bus_socket
 export XDG_CONFIG_HOME=/home/browser/.config
 export XDG_CACHE_HOME=/home/browser/.cache
 export HOME=/home/browser
+
+# ---- Wait for Wayland compositor --------------------------------------------
+WAYLAND_SOCKET_PATH="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
+echo "[chromium-launch] Waiting for Wayland socket ($WAYLAND_SOCKET_PATH)..."
+for i in $(seq 1 60); do
+  [ -S "$WAYLAND_SOCKET_PATH" ] && break
+  sleep 0.5
+done
+if [ ! -S "$WAYLAND_SOCKET_PATH" ]; then
+  echo "[chromium-launch] ERROR: Wayland socket not found after 30s."
+  exit 1
+fi
+echo "[chromium-launch] Wayland compositor is ready."
 
 # ---- Launch Chromium as unprivileged user -----------------------------------
 exec runuser -u browser -- chromium "${UNIQUE_FLAGS[@]}"
