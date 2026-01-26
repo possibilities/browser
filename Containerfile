@@ -41,6 +41,9 @@ RUN mkdir -p \
     && chown -R browser:browser /run/user/1000 /home/browser \
     && chmod 700 /run/user/1000
 
+# Custom D-Bus config (avoids capability dropping unsupported in apple/container VMs)
+COPY configs/dbus-system.conf /etc/dbus-1/container-system.conf
+
 # Chromium managed policy (anti-detection settings)
 RUN mkdir -p /etc/chromium/policies/managed
 COPY configs/policy.json /etc/chromium/policies/managed/policy.json
