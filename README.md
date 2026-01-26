@@ -1,8 +1,19 @@
 # browser-in-apple-container
 
-Minimal ARM64 Chromium container for [apple/container](https://github.com/apple/container), exposing Chrome DevTools Protocol (CDP) on port 9222.
+A fast, anti-detection Chromium container for [apple/container](https://github.com/apple/container) on Apple Silicon.
 
-Uses Mutter as a headless Wayland compositor -- no X11 stack. Preserves anti-detection configs from onkernel's kernel-images.
+## Goals
+
+**Fast container browser on apple/container.** Chromium runs inside a lightweight ARM64 micro-VM with sub-second startup, exposing Chrome DevTools Protocol (CDP) on port 9222. Mutter provides a headless Wayland compositor — no X11 stack required.
+
+**Anti-detection by default.** The container is configured to pass common automation detection checks out of the box. Measures include:
+
+- `--disable-blink-features=AutomationControlled` — removes the `navigator.webdriver` flag
+- `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` — prevents WebRTC IP leaks
+- Full desktop font stack (Liberation, Noto CJK, color emoji, Nanum) so font-fingerprinting looks like a real machine
+- Real virtual monitor via Mutter/Wayland instead of headless mode, so `window.outerHeight`, screen dimensions, and GPU info behave normally
+- Safe Browsing, DNS prefetching, Chrome Sync, and signin all disabled to reduce tracking surface
+- First-run prompts and import dialogs suppressed via managed policy and master preferences
 
 ## Architecture
 
@@ -194,3 +205,11 @@ If Wayland doesn't work in apple/container, switch to Xvfb + Mutter X11:
 3. **Add services/xvfb.conf**: `Xvfb :1 -screen 0 1920x1080x24`
 4. **scripts/entrypoint.sh**: Add Xvfb start step, change readiness check to `xdpyinfo -display :1`
 5. **scripts/chromium-launch.sh**: Remove `--ozone-platform=wayland`, add `export DISPLAY=:1`
+
+## Acknowledgements
+
+Code and ideas from this repo come from these projects:
+
+- https://github.com/onkernel/kernel-images
+
+See also [NOTICES](./NOTICES)
