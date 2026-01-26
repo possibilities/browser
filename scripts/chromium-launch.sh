@@ -13,12 +13,20 @@ rm -f "$USER_DATA_DIR/SingletonLock" \
       "$USER_DATA_DIR/SingletonCookie"
 
 # ---- Kill any existing chromium processes for clean restart ------------------
-pkill -9 -x chromium 2>/dev/null || true
-# Wait briefly for processes to die
-for i in $(seq 1 20); do
+pkill -x chromium 2>/dev/null || true
+# Wait briefly for processes to exit gracefully
+for _ in $(seq 1 20); do
   pgrep -x chromium >/dev/null 2>&1 || break
   sleep 0.1
 done
+if pgrep -x chromium >/dev/null 2>&1; then
+  echo "[chromium-launch] Chromium did not exit gracefully, sending SIGKILL." >&2
+  pkill -9 -x chromium 2>/dev/null || true
+  for _ in $(seq 1 10); do
+    pgrep -x chromium >/dev/null 2>&1 || break
+    sleep 0.1
+  done
+fi
 
 # ---- Flag validation ---------------------------------------------------------
 BLOCKED_FLAG_PREFIXES=(
@@ -107,7 +115,7 @@ export HOME=/home/browser
 # ---- Wait for Wayland compositor --------------------------------------------
 WAYLAND_SOCKET_PATH="${XDG_RUNTIME_DIR}/${WAYLAND_DISPLAY}"
 echo "[chromium-launch] Waiting for Wayland socket ($WAYLAND_SOCKET_PATH)..."
-for i in $(seq 1 60); do
+for _ in $(seq 1 60); do
   [ -S "$WAYLAND_SOCKET_PATH" ] && break
   sleep 0.5
 done
