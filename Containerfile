@@ -20,8 +20,7 @@ RUN apt-get update && \
     fonts-noto-color-emoji \
     fonts-nanum \
     fontconfig \
-    # Utilities for readiness checks, process management, and port forwarding
-    netcat-openbsd \
+    # Utilities for process management and port forwarding
     procps \
     socat \
     jq \

@@ -183,7 +183,7 @@ If Mutter headless Wayland doesn't work (e.g., no GPU/render node in the VM), fa
 
 - Verify port mapping: `container run --publish 9222:9222`
 - Check Chromium started: `container exec browser supervisorctl status`
-- Check if Chromium is listening: `container exec browser nc -z 127.0.0.1 9222`
+- Check if Chromium is listening: `container exec browser socat -T1 /dev/null TCP:127.0.0.1:9222,connect-timeout=1 && echo open`
 
 ### X11 Fallback
 
