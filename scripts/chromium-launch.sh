@@ -31,6 +31,8 @@ FLAGS=(
   --no-first-run
   --disable-dev-shm-usage
   --start-maximized
+  --disable-blink-features=AutomationControlled
+  --force-webrtc-ip-handling-policy=disable_non_proxied_udp
 )
 
 # Merge flags from CHROMIUM_FLAGS environment variable
