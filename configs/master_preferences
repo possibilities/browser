@@ -1,0 +1,30 @@
+{
+  "distribution": {
+    "skip_first_run_ui": true,
+    "suppress_first_run_default_browser_prompt": true,
+    "make_chrome_default": false,
+    "make_chrome_default_for_user": false,
+    "import_bookmarks": false,
+    "import_history": false,
+    "import_search_engine": false
+  },
+  "browser": {
+    "check_default_browser": false,
+    "show_home_button": false
+  },
+  "safebrowsing": {
+    "enabled": false
+  },
+  "sync": {
+    "has_setup_completed": false
+  },
+  "signin": {
+    "allowed": false
+  },
+  "dns_prefetching": {
+    "enabled": false
+  },
+  "bookmark_bar": {
+    "show_on_all_tabs": false
+  }
+}

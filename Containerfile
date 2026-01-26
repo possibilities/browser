@@ -1,0 +1,67 @@
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install all runtime dependencies in a single layer
+RUN apt-get update && \
+    apt-get -y --no-install-recommends install \
+    # Wayland compositor
+    mutter \
+    # System bus (required by Mutter and Chromium)
+    dbus \
+    # Browser
+    chromium \
+    # Process management
+    supervisor \
+    # Anti-detection fonts
+    fonts-liberation \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
+    fonts-nanum \
+    fontconfig \
+    # Utilities for readiness checks and process management
+    netcat-openbsd \
+    procps \
+    && fc-cache -f \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create unprivileged browser user
+RUN useradd -m -s /bin/bash -u 1000 browser
+
+# Pre-create runtime directories
+RUN mkdir -p \
+    /run/user/1000 \
+    /run/dbus \
+    /home/browser/user-data \
+    /home/browser/.config/chromium \
+    /home/browser/.pki/nssdb \
+    /home/browser/.cache/dconf \
+    /var/log/supervisord \
+    /chromium \
+    && chown -R browser:browser /run/user/1000 /home/browser \
+    && chmod 700 /run/user/1000
+
+# Chromium managed policy (anti-detection settings)
+RUN mkdir -p /etc/chromium/policies/managed
+COPY configs/policy.json /etc/chromium/policies/managed/policy.json
+
+# Chromium first-run preferences
+COPY configs/master_preferences /etc/chromium/master_preferences
+
+# Supervisor configuration
+COPY configs/supervisord.conf /etc/supervisor/supervisord.conf
+COPY services/ /etc/supervisor/conf.d/services/
+
+# Scripts
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY scripts/chromium-launch.sh /usr/local/bin/chromium-launch.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/chromium-launch.sh
+
+# Environment defaults
+ENV WIDTH=1920
+ENV HEIGHT=1080
+ENV CDP_PORT=9222
+
+EXPOSE 9222
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
