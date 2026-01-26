@@ -24,7 +24,11 @@ apple/container micro-VM (arm64, Debian bookworm)
     ├── D-Bus session daemon
     ├── Mutter --wayland --headless --virtual-monitor 1920x1080
     ├── Chromium --remote-debugging-port=9221 (internal, localhost only)
-    └── socat (forwards CDP_BIND_ADDRESS:9222 → 127.0.0.1:9221)
+    ├── socat (forwards CDP_BIND_ADDRESS:9222 → 127.0.0.1:9221)
+    └── [ENABLE_RDP=true only]
+        ├── PipeWire (audio/video pipeline)
+        ├── WirePlumber (PipeWire session manager)
+        └── gnome-remote-desktop (RDP server on port 3389)
 ```
 
 Startup order: D-Bus → Mutter (wait for D-Bus session socket) → Chromium (wait for Wayland socket) → socat (wait for internal CDP port).
@@ -97,6 +101,7 @@ curl http://127.0.0.1:19222/json/version
 | `CDP_PORT` | `9222` | Chrome DevTools Protocol port |
 | `CDP_BIND_ADDRESS` | `127.0.0.1` | Address socat binds to for CDP (see [Security](#security)) |
 | `CHROMIUM_FLAGS` | _(empty)_ | Additional Chromium flags (space-separated) |
+| `ENABLE_RDP` | `false` | Start PipeWire + gnome-remote-desktop for RDP access on port 3389 |
 
 ### Runtime Flag Overlay
 
@@ -150,6 +155,26 @@ container run -d \
   browser:latest
 ```
 
+## RDP Access
+
+Set `ENABLE_RDP=true` to start PipeWire, WirePlumber, and gnome-remote-desktop inside the container. This exposes an RDP server on port 3389 that you can connect to with any RDP client (e.g., Microsoft Remote Desktop).
+
+```bash
+container run -d \
+  --name browser \
+  --cpus 4 \
+  --memory 4G \
+  --publish 9222:9222 \
+  --publish 3389:3389 \
+  --tmpfs /dev/shm \
+  -e ENABLE_RDP=true \
+  browser:latest
+```
+
+Default RDP credentials: username `browser`, password `browser`.
+
+When `ENABLE_RDP` is not set or set to `false` (the default), the RDP services are removed at startup and only CDP is available.
+
 ## Connecting
 
 ### CDP Endpoint
@@ -189,6 +214,19 @@ container exec browser cat /var/log/supervisord/dbus
 ### Mutter Fails to Start
 
 If Mutter headless Wayland doesn't work (e.g., no GPU/render node in the VM), fall back to X11. See the "X11 Fallback" section below.
+
+### RDP Not Working
+
+If `ENABLE_RDP=true` but RDP connections fail:
+
+```bash
+container exec browser cat /var/log/supervisord/pipewire
+container exec browser cat /var/log/supervisord/wireplumber
+container exec browser cat /var/log/supervisord/gnome-remote-desktop
+container exec browser supervisorctl status
+```
+
+Verify that port 3389 is published (`--publish 3389:3389`) and that `ENABLE_RDP=true` is set.
 
 ### CDP Unreachable
 

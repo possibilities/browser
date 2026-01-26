@@ -2,19 +2,19 @@
 #
 # e2e-test.sh — End-to-end test for the browser container.
 #
-# Tests both the base image (browser) and the interactive image
-# (browser-rdp with RDP via gnome-remote-desktop).
+# Tests the browser image in two modes: base (CDP only) and RDP-enabled
+# (CDP + gnome-remote-desktop via ENABLE_RDP=true).
 #
-# Starts one or more containers of each type, verifies that Chromium's
-# CDP endpoint comes up, verifies the RDP port on interactive
+# Starts one or more containers of each mode, verifies that Chromium's
+# CDP endpoint comes up, verifies the RDP port on RDP-enabled
 # containers, uses agent-browser to load web pages, and asserts that the
 # pages rendered correctly.  Cleans up containers on exit regardless of
 # success or failure.
 #
 # Usage:
-#   ./e2e-test.sh              # run with defaults (2 containers per image)
-#   ./e2e-test.sh 1            # run with 1 container per image
-#   ./e2e-test.sh 3            # run with 3 containers per image
+#   ./e2e-test.sh              # run with defaults (2 containers per mode)
+#   ./e2e-test.sh 1            # run with 1 container per mode
+#   ./e2e-test.sh 3            # run with 3 containers per mode
 #
 set -euo pipefail
 
@@ -22,19 +22,18 @@ set -euo pipefail
 # Configuration
 # ---------------------------------------------------------------------------
 readonly BASE_PREFIX="e2e-browser-test"
-readonly INTERACTIVE_PREFIX="e2e-interactive-test"
+readonly RDP_PREFIX="e2e-rdp-test"
 readonly BASE_IMAGE="browser:test-latest"
-readonly INTERACTIVE_IMAGE="browser-rdp:test-latest"
 
 readonly BASE_CDP_PORT=19222                   # base container CDP ports start here
-readonly INTERACTIVE_CDP_PORT=19322            # interactive container CDP ports start here
-readonly INTERACTIVE_RDP_PORT=13389            # interactive container RDP ports start here
+readonly RDP_CDP_PORT=19322                    # RDP container CDP ports start here
+readonly RDP_RDP_PORT=13389                    # RDP container RDP ports start here
 
 readonly CONTAINER_CPUS=4
 readonly CONTAINER_MEMORY="4G"
 readonly CDP_WAIT_TIMEOUT=120                  # seconds to wait for CDP readiness
 readonly SERVICE_WAIT_TIMEOUT=60               # seconds to wait for RDP readiness
-readonly NUM_CONTAINERS="${1:-2}"               # default: 2 containers per image
+readonly NUM_CONTAINERS="${1:-2}"               # default: 2 containers per mode
 
 # Test targets — pages we'll load and the expected title substring
 declare -a TEST_URLS=("https://example.com" "https://www.wikipedia.org")
@@ -52,7 +51,7 @@ fail() { printf '[%s] \033[31mFAIL\033[0m %s\n' "$(date +%H:%M:%S)" "$*"; }
 # ---------------------------------------------------------------------------
 cleanup() {
     log "Cleaning up test containers …"
-    for prefix in "$BASE_PREFIX" "$INTERACTIVE_PREFIX"; do
+    for prefix in "$BASE_PREFIX" "$RDP_PREFIX"; do
         for i in $(seq 0 $(( NUM_CONTAINERS - 1 ))); do
             local name="${prefix}-${i}"
             container stop "$name"   2>/dev/null || true
@@ -60,7 +59,6 @@ cleanup() {
         done
     done
     log "Removing test images …"
-    container image remove "$INTERACTIVE_IMAGE" 2>/dev/null || true
     container image remove "$BASE_IMAGE" 2>/dev/null || true
     log "Cleanup complete."
 }
@@ -77,13 +75,8 @@ cleanup  # trap is already set, so this is safe to call directly
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-log "Building base image ${BASE_IMAGE} …"
+log "Building image ${BASE_IMAGE} …"
 container build -t "$BASE_IMAGE" "$SCRIPT_DIR"
-
-log "Building interactive image ${INTERACTIVE_IMAGE} …"
-container build -f "$SCRIPT_DIR/Containerfile.rdp" \
-    --build-arg BASE_IMAGE="$BASE_IMAGE" \
-    -t "$INTERACTIVE_IMAGE" "$SCRIPT_DIR"
 
 # ---------------------------------------------------------------------------
 # Start containers
@@ -103,10 +96,10 @@ for i in $(seq 0 $(( NUM_CONTAINERS - 1 ))); do
 done
 
 for i in $(seq 0 $(( NUM_CONTAINERS - 1 ))); do
-    name="${INTERACTIVE_PREFIX}-${i}"
-    cdp_port=$(( INTERACTIVE_CDP_PORT + i ))
-    rdp_port=$(( INTERACTIVE_RDP_PORT + i ))
-    log "Starting interactive container ${name} (CDP ${cdp_port}, RDP ${rdp_port}) …"
+    name="${RDP_PREFIX}-${i}"
+    cdp_port=$(( RDP_CDP_PORT + i ))
+    rdp_port=$(( RDP_RDP_PORT + i ))
+    log "Starting RDP container ${name} (CDP ${cdp_port}, RDP ${rdp_port}) …"
     container run -d \
         --name "$name" \
         --cpus "$CONTAINER_CPUS" \
@@ -115,7 +108,8 @@ for i in $(seq 0 $(( NUM_CONTAINERS - 1 ))); do
         --publish "${rdp_port}:3389" \
         --tmpfs /dev/shm \
         -e CDP_BIND_ADDRESS=0.0.0.0 \
-        "$INTERACTIVE_IMAGE"
+        -e ENABLE_RDP=true \
+        "$BASE_IMAGE"
 done
 
 # ---------------------------------------------------------------------------
@@ -145,11 +139,11 @@ for i in $(seq 0 $(( NUM_CONTAINERS - 1 ))); do
 done
 
 for i in $(seq 0 $(( NUM_CONTAINERS - 1 ))); do
-    wait_for_cdp $(( INTERACTIVE_CDP_PORT + i )) "${INTERACTIVE_PREFIX}-${i}"
+    wait_for_cdp $(( RDP_CDP_PORT + i )) "${RDP_PREFIX}-${i}"
 done
 
 # ---------------------------------------------------------------------------
-# Wait for RDP on interactive containers
+# Wait for RDP on RDP-enabled containers
 # ---------------------------------------------------------------------------
 wait_for_port() {
     local port="$1" name="$2" service="$3" deadline
@@ -174,8 +168,8 @@ FAILURES=0
 TESTS_RUN=0
 
 for i in $(seq 0 $(( NUM_CONTAINERS - 1 ))); do
-    name="${INTERACTIVE_PREFIX}-${i}"
-    rdp_port=$(( INTERACTIVE_RDP_PORT + i ))
+    name="${RDP_PREFIX}-${i}"
+    rdp_port=$(( RDP_RDP_PORT + i ))
 
     TESTS_RUN=$(( TESTS_RUN + 1 ))
     if wait_for_port "$rdp_port" "$name" "RDP"; then
@@ -243,8 +237,8 @@ run_page_tests() {
 log "===== Testing base image ====="
 run_page_tests "$BASE_PREFIX" "$BASE_CDP_PORT" "base"
 
-log "===== Testing interactive image ====="
-run_page_tests "$INTERACTIVE_PREFIX" "$INTERACTIVE_CDP_PORT" "interactive"
+log "===== Testing RDP mode ====="
+run_page_tests "$RDP_PREFIX" "$RDP_CDP_PORT" "rdp"
 
 # ---------------------------------------------------------------------------
 # Summary

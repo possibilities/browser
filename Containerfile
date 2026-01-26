@@ -24,6 +24,12 @@ RUN apt-get update && \
     procps \
     socat \
     jq \
+    # RDP access (gnome-remote-desktop + PipeWire screen capture)
+    gnome-remote-desktop \
+    pipewire \
+    wireplumber \
+    dconf-cli \
+    openssl \
     && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
@@ -37,6 +43,7 @@ RUN mkdir -p \
     /home/browser/.config/chromium \
     /home/browser/.pki/nssdb \
     /home/browser/.cache/dconf \
+    /home/browser/.local/share/gnome-remote-desktop \
     /var/log/supervisord \
     /chromium \
     /tmp/.X11-unix \
@@ -45,7 +52,7 @@ RUN mkdir -p \
     && chmod 1777 /tmp/.X11-unix
 
 # Custom D-Bus session bus config (avoids capability dropping unsupported in apple/container VMs)
-COPY configs/dbus-session.conf /etc/dbus-1/container-session.conf
+COPY rdp/dbus-session.conf /etc/dbus-1/container-session.conf
 
 # Chromium managed policy (anti-detection settings)
 RUN mkdir -p /etc/chromium/policies/managed
@@ -57,11 +64,16 @@ COPY configs/master_preferences /etc/chromium/master_preferences
 # Supervisor configuration
 COPY configs/supervisord.conf /etc/supervisor/supervisord.conf
 COPY services/ /etc/supervisor/conf.d/services/
+COPY rdp/services/ /etc/supervisor/conf.d/services/
 
 # Scripts
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY scripts/chromium-launch.sh /usr/local/bin/chromium-launch.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/chromium-launch.sh
+
+# Configure RDP: dconf settings, TLS certificates, credentials
+COPY rdp/setup-remote-desktop.sh /tmp/setup-remote-desktop.sh
+RUN chmod +x /tmp/setup-remote-desktop.sh && /tmp/setup-remote-desktop.sh && rm /tmp/setup-remote-desktop.sh
 
 # Environment defaults
 ENV WIDTH=1920
@@ -69,7 +81,9 @@ ENV HEIGHT=1080
 ENV CDP_PORT=9222
 ENV CDP_INTERNAL_PORT=9221
 ENV CDP_BIND_ADDRESS=127.0.0.1
+ENV ENABLE_RDP=false
 
 EXPOSE 9222
+EXPOSE 3389
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
