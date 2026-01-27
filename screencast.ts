@@ -168,7 +168,9 @@ const HTML = `<!DOCTYPE html>
     // ── Main application ─────────────────────────────────
     function App() {
       var [containers, setContainers] = useState([]);
-      var [selectedId, setSelectedId] = useState(null);
+      var [selectedId, setSelectedId] = useState(function () {
+        return new URLSearchParams(location.search).get("c") || null;
+      });
       var [connState, setConnState] = useState("idle");
       var [stats, setStats] = useState({ fps: 0, frames: 0, w: 0, h: 0 });
       var [error, setError] = useState(null);
@@ -197,6 +199,15 @@ const HTML = `<!DOCTYPE html>
           setSelectedId(null);
         }
       }, [containers, selectedId]);
+
+      // Sync selected container to URL
+      useEffect(function () {
+        var params = new URLSearchParams(location.search);
+        if (selectedId) params.set("c", selectedId);
+        else params.delete("c");
+        var qs = params.toString();
+        history.replaceState(null, "", qs ? "?" + qs : location.pathname);
+      }, [selectedId]);
 
       // Connect to selected container
       useEffect(function () {
