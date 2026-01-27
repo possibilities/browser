@@ -498,7 +498,11 @@ Bun.serve({
     // ── API: generate .rdp file for macOS Windows App ──
     if (url.pathname === "/api/rdp-file") {
       const port = url.searchParams.get("port") || "3389";
-      const rdp = `full address:s:localhost:${port}\n`;
+      const rdp = [
+        `full address:s:localhost:${port}`,
+        `username:s:browser`,
+        ``,
+      ].join("\r\n");
       return new Response(rdp, {
         headers: {
           "Content-Type": "application/x-rdp",
