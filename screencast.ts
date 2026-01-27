@@ -209,6 +209,13 @@ const HTML = `<!DOCTYPE html>
         history.replaceState(null, "", qs ? "?" + qs : location.pathname);
       }, [selectedId]);
 
+      // Stable key that changes only when the selected container's CDP endpoint changes
+      var connectionKey = "";
+      if (selectedId) {
+        var sc = containers.find(function (c) { return c.id === selectedId; });
+        if (sc) connectionKey = sc.cdpHost + ":" + sc.cdpPort;
+      }
+
       // Connect to selected container
       useEffect(function () {
         if (!selectedId) {
@@ -355,7 +362,7 @@ const HTML = `<!DOCTYPE html>
           if (wsRef.current) try { wsRef.current.close(); } catch (e) {}
           wsRef.current = null;
         };
-      }, [selectedId]);
+      }, [selectedId, connectionKey]);
 
       // ── Render ─────────────────────────────────────────
 
