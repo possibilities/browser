@@ -27,5 +27,5 @@ Do not remove or weaken any of the following. They exist to defeat automation de
 
 - Chromium runs as unprivileged user `browser` (UID 1000), never root.
 - Never weaken the blocked-flag list in `chromium-launch.sh` (`--no-sandbox`, `--disable-web-security`, `--remote-debugging-port`, etc.).
-- CDP binds to `127.0.0.1` by default. Do not change the default to `0.0.0.0`.
+- CDP binds to `0.0.0.0` by default so it is reachable via published ports.
 - Never add `--no-sandbox` or `--disable-setuid-sandbox` to any flag list.
