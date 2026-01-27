@@ -34,6 +34,7 @@ async function getContainers() {
         const addr = (nets[0]?.ipv4Address ?? "").replace(/\/\d+$/, "");
         const ports: any[] = cfg.publishedPorts ?? [];
         const cdp = ports.find((p: any) => p.containerPort === 9222);
+        const rdp = ports.find((p: any) => p.containerPort === 3389);
 
         return {
           id: cfg.id ?? "",
@@ -47,6 +48,7 @@ async function getContainers() {
             : 0,
           cdpHost: cdp ? "127.0.0.1" : addr,
           cdpPort: cdp?.hostPort ?? 9222,
+          rdpPort: rdp?.hostPort ?? null,
         };
       });
   } catch {
@@ -352,6 +354,8 @@ const HTML = `<!DOCTYPE html>
         statusText = stats.w + "\\u00d7" + stats.h + "  " + Math.round(stats.fps) + " fps  #" + stats.frames;
       }
 
+      var selectedContainer = selectedId ? containers.find(function (c) { return c.id === selectedId; }) : null;
+
       return (
         <div className="flex flex-col h-full">
           {/* Header */}
@@ -387,6 +391,19 @@ const HTML = `<!DOCTYPE html>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </button>
+            )}
+
+            {selectedContainer && selectedContainer.rdpPort && (
+              <a
+                href={"rdp://localhost:" + selectedContainer.rdpPort}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/60 border border-zinc-700/40 hover:border-zinc-600/60 transition-colors"
+                title="Open in Remote Desktop"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25A2.25 2.25 0 015.25 3h13.5A2.25 2.25 0 0121 5.25z" />
+                </svg>
+                RDP
+              </a>
             )}
 
             {statusText && (
@@ -447,7 +464,9 @@ Bun.serve({
       const port = url.searchParams.get("port") || "9222";
       const path = url.searchParams.get("path") || "/json";
       try {
-        const res = await fetch("http://" + host + ":" + port + path);
+        const res = await fetch("http://" + host + ":" + port + path, {
+          signal: AbortSignal.timeout(3000),
+        });
         const body = await res.text();
         return new Response(body, {
           status: res.status,
