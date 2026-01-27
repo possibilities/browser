@@ -86,6 +86,7 @@ const HTML = `<!DOCTYPE html>
     @keyframes fade-in { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
     .fade-in { animation: fade-in 0.2s ease-out; }
     select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2371717a' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+    .tab-scroll::-webkit-scrollbar { display: none; }
   </style>
 </head>
 <body class="bg-zinc-950 text-zinc-200 h-screen flex flex-col overflow-hidden">
@@ -174,10 +175,35 @@ const HTML = `<!DOCTYPE html>
       var [connState, setConnState] = useState("idle");
       var [stats, setStats] = useState({ fps: 0, frames: 0, w: 0, h: 0 });
       var [error, setError] = useState(null);
+      var [tabs, setTabs] = useState([]);
+      var [activeTabId, setActiveTabId] = useState(null);
       var imgRef = useRef(null);
       var wsRef = useRef(null);
       var containersRef = useRef(containers);
       containersRef.current = containers;
+      var activeTabIdRef = useRef(null);
+      var sendFnRef = useRef(null);
+      var targetSessIdRef = useRef(null);
+
+      useEffect(function () { activeTabIdRef.current = activeTabId; }, [activeTabId]);
+
+      function switchTab(targetId) {
+        if (targetId === activeTabIdRef.current) return;
+        var sendFn = sendFnRef.current;
+        if (!sendFn) return;
+
+        if (targetSessIdRef.current) {
+          sendFn("Page.stopScreencast", {}, targetSessIdRef.current);
+          sendFn("Target.detachFromTarget", { sessionId: targetSessIdRef.current });
+          targetSessIdRef.current = null;
+        }
+
+        activeTabIdRef.current = targetId;
+        setActiveTabId(targetId);
+        setConnState("connecting");
+
+        sendFn("Target.attachToTarget", { targetId: targetId, flatten: true });
+      }
 
       // Fetch containers periodically
       useEffect(function () {
@@ -216,7 +242,7 @@ const HTML = `<!DOCTYPE html>
         if (sc) connectionKey = sc.cdpHost + ":" + sc.cdpPort;
       }
 
-      // Connect to selected container
+      // Connect to selected container (always browser-level for tab management)
       useEffect(function () {
         if (!selectedId) {
           setConnState("idle");
@@ -229,45 +255,29 @@ const HTML = `<!DOCTYPE html>
         var cancelled = false;
         var currentWs = null;
 
+        setTabs([]);
+        setActiveTabId(null);
+        activeTabIdRef.current = null;
+        sendFnRef.current = null;
+        targetSessIdRef.current = null;
+
         function connect() {
           if (cancelled) return;
           setError(null);
           setConnState("discovering");
           setStats({ fps: 0, frames: 0, w: 0, h: 0 });
 
-          fetch("/api/cdp-targets?host=" + container.cdpHost + "&port=" + container.cdpPort)
+          fetch("/api/cdp-targets?host=" + container.cdpHost + "&port=" + container.cdpPort + "&path=/json/version")
             .then(function (r) { return r.json(); })
-            .then(function (targets) {
+            .then(function (info) {
               if (cancelled) return;
-
-              var wsUrl = null;
-              var mode = "page";
-
-              if (Array.isArray(targets)) {
-                var page = targets.find(function (t) { return t.type === "page"; });
-                if (page && page.webSocketDebuggerUrl) {
-                  var pathname = new URL(page.webSocketDebuggerUrl).pathname;
-                  wsUrl = "ws://" + container.cdpHost + ":" + container.cdpPort + pathname;
-                }
+              if (info && info.webSocketDebuggerUrl) {
+                var pathname = new URL(info.webSocketDebuggerUrl).pathname;
+                var wsUrl = "ws://" + container.cdpHost + ":" + container.cdpPort + pathname;
+                openWs(wsUrl);
+              } else {
+                throw new Error("No CDP endpoint found");
               }
-
-              if (!wsUrl) {
-                // Try browser-level
-                return fetch("/api/cdp-targets?host=" + container.cdpHost + "&port=" + container.cdpPort + "&path=/json/version")
-                  .then(function (r) { return r.json(); })
-                  .then(function (info) {
-                    if (cancelled) return;
-                    if (info && info.webSocketDebuggerUrl) {
-                      var pathname = new URL(info.webSocketDebuggerUrl).pathname;
-                      wsUrl = "ws://" + container.cdpHost + ":" + container.cdpPort + pathname;
-                      mode = "browser";
-                    }
-                    if (!wsUrl) throw new Error("No CDP endpoint found");
-                    openWs(wsUrl, mode);
-                  });
-              }
-
-              openWs(wsUrl, mode);
             })
             .catch(function (e) {
               if (cancelled) return;
@@ -277,7 +287,7 @@ const HTML = `<!DOCTYPE html>
             });
         }
 
-        function openWs(wsUrl, mode) {
+        function openWs(wsUrl) {
           if (cancelled) return;
           setConnState("connecting");
 
@@ -287,7 +297,6 @@ const HTML = `<!DOCTYPE html>
           wsRef.current = ws;
 
           var msgId = 0;
-          var targetSessId = null;
           var fpsState = { lastTime: 0, fps: 0, frames: 0 };
 
           function send(method, params, sessId) {
@@ -295,6 +304,8 @@ const HTML = `<!DOCTYPE html>
             if (sessId) msg.sessionId = sessId;
             ws.send(JSON.stringify(msg));
           }
+
+          sendFnRef.current = send;
 
           function onFrame(fp, sessId) {
             fpsState.frames++;
@@ -317,28 +328,81 @@ const HTML = `<!DOCTYPE html>
 
           ws.onopen = function () {
             if (cancelled) { ws.close(); return; }
-            if (mode === "browser") {
-              send("Target.getTargets");
-            } else {
-              send("Page.startScreencast", { format: "jpeg", quality: 80, everyNthFrame: 1 });
-            }
+            send("Target.setDiscoverTargets", { discover: true });
+            send("Target.getTargets");
           };
 
           ws.onmessage = function (e) {
             var msg = JSON.parse(e.data);
 
+            // Response to Target.getTargets
             if (msg.result && msg.result.targetInfos) {
-              var page = msg.result.targetInfos.find(function (t) { return t.type === "page"; });
-              if (page) send("Target.attachToTarget", { targetId: page.targetId, flatten: true });
+              var pages = msg.result.targetInfos.filter(function (t) { return t.type === "page"; });
+              setTabs(pages.map(function (t) { return { targetId: t.targetId, title: t.title, url: t.url }; }));
+
+              if (pages.length > 0 && !activeTabIdRef.current) {
+                activeTabIdRef.current = pages[0].targetId;
+                setActiveTabId(pages[0].targetId);
+                send("Target.attachToTarget", { targetId: pages[0].targetId, flatten: true });
+              }
             }
 
+            // Response to Target.attachToTarget
             if (msg.result && msg.result.sessionId) {
-              targetSessId = msg.result.sessionId;
-              send("Page.startScreencast", { format: "jpeg", quality: 80, everyNthFrame: 1 }, targetSessId);
+              targetSessIdRef.current = msg.result.sessionId;
+              send("Page.startScreencast", { format: "jpeg", quality: 80, everyNthFrame: 1 }, msg.result.sessionId);
             }
 
+            // Screencast frame
             if (msg.method === "Page.screencastFrame") {
-              onFrame(msg.params, msg.sessionId || targetSessId);
+              onFrame(msg.params, msg.sessionId || targetSessIdRef.current);
+            }
+
+            // Tab created
+            if (msg.method === "Target.targetCreated") {
+              var info = msg.params.targetInfo;
+              if (info && info.type === "page") {
+                setTabs(function (prev) {
+                  if (prev.find(function (t) { return t.targetId === info.targetId; })) return prev;
+                  return prev.concat({ targetId: info.targetId, title: info.title, url: info.url });
+                });
+              }
+            }
+
+            // Tab destroyed
+            if (msg.method === "Target.targetDestroyed") {
+              var destroyedId = msg.params.targetId;
+              setTabs(function (prev) {
+                var remaining = prev.filter(function (t) { return t.targetId !== destroyedId; });
+                if (activeTabIdRef.current === destroyedId) {
+                  targetSessIdRef.current = null;
+                  if (remaining.length > 0) {
+                    activeTabIdRef.current = remaining[0].targetId;
+                    setActiveTabId(remaining[0].targetId);
+                    setConnState("connecting");
+                    send("Target.attachToTarget", { targetId: remaining[0].targetId, flatten: true });
+                  } else {
+                    activeTabIdRef.current = null;
+                    setActiveTabId(null);
+                  }
+                }
+                return remaining;
+              });
+            }
+
+            // Tab info changed (title/url update)
+            if (msg.method === "Target.targetInfoChanged") {
+              var changed = msg.params.targetInfo;
+              if (changed && changed.type === "page") {
+                setTabs(function (prev) {
+                  return prev.map(function (t) {
+                    if (t.targetId === changed.targetId) {
+                      return { targetId: changed.targetId, title: changed.title, url: changed.url };
+                    }
+                    return t;
+                  });
+                });
+              }
             }
           };
 
@@ -347,6 +411,8 @@ const HTML = `<!DOCTYPE html>
           };
 
           ws.onclose = function () {
+            sendFnRef.current = null;
+            targetSessIdRef.current = null;
             if (!cancelled) {
               setConnState("disconnected");
               setTimeout(function () { if (!cancelled) connect(); }, 2000);
@@ -358,6 +424,9 @@ const HTML = `<!DOCTYPE html>
 
         return function () {
           cancelled = true;
+          sendFnRef.current = null;
+          targetSessIdRef.current = null;
+          activeTabIdRef.current = null;
           if (currentWs) try { currentWs.close(); } catch (e) {}
           if (wsRef.current) try { wsRef.current.close(); } catch (e) {}
           wsRef.current = null;
@@ -430,6 +499,29 @@ const HTML = `<!DOCTYPE html>
               </div>
             )}
           </header>
+
+          {/* Tab bar */}
+          {tabs.length > 1 && (
+            <div className="flex items-stretch bg-zinc-900/60 border-b border-zinc-800/50 shrink-0 overflow-x-auto tab-scroll" style={{ scrollbarWidth: "none" }}>
+              {tabs.map(function (tab) {
+                var isActive = tab.targetId === activeTabId;
+                var label = tab.title || tab.url || "Untitled";
+                return (
+                  <button
+                    key={tab.targetId}
+                    onClick={function () { switchTab(tab.targetId); }}
+                    className={"flex items-center px-3 py-1.5 text-[11px] whitespace-nowrap border-b-2 transition-colors " +
+                      (isActive
+                        ? "border-zinc-400 text-zinc-200 bg-zinc-800/50"
+                        : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30")}
+                    title={tab.url}
+                  >
+                    <span className="truncate" style={{ maxWidth: "180px" }}>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
           {/* Screencast area */}
           <main className="flex-1 flex items-center justify-center overflow-hidden relative">
