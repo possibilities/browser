@@ -406,7 +406,7 @@ const HTML = `<!DOCTYPE html>
 
             {selectedContainer && selectedContainer.rdpPort && (
               <a
-                href={"rdp://localhost:" + selectedContainer.rdpPort}
+                href={"/api/rdp-file?port=" + selectedContainer.rdpPort}
                 className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/60 border border-zinc-700/40 hover:border-zinc-600/60 transition-colors"
                 title="Open in Remote Desktop"
               >
@@ -486,6 +486,18 @@ Bun.serve({
       } catch (e: any) {
         return Response.json({ error: e?.message ?? "CDP fetch failed" }, { status: 502 });
       }
+    }
+
+    // ── API: generate .rdp file for macOS Windows App ──
+    if (url.pathname === "/api/rdp-file") {
+      const port = url.searchParams.get("port") || "3389";
+      const rdp = `full address:s:localhost:${port}\n`;
+      return new Response(rdp, {
+        headers: {
+          "Content-Type": "application/x-rdp",
+          "Content-Disposition": `attachment; filename="container.rdp"`,
+        },
+      });
     }
 
     // ── Serve HTML ──
