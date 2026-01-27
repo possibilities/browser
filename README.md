@@ -25,10 +25,9 @@ apple/container micro-VM (arm64, Debian bookworm)
     ├── Mutter --wayland --headless --virtual-monitor 1920x1080
     ├── Chromium --remote-debugging-port=9221 (internal, localhost only)
     ├── socat (forwards CDP_BIND_ADDRESS:9222 → 127.0.0.1:9221)
-    └── [ENABLE_RDP=true only]
-        ├── PipeWire (audio/video pipeline)
-        ├── WirePlumber (PipeWire session manager)
-        └── gnome-remote-desktop (RDP server on port 3389)
+    ├── PipeWire (audio/video pipeline)
+    ├── WirePlumber (PipeWire session manager)
+    └── gnome-remote-desktop (RDP server on port 3389)
 ```
 
 Startup order: D-Bus → Mutter (wait for D-Bus session socket) → Chromium (wait for Wayland socket) → socat (wait for internal CDP port).
@@ -101,7 +100,9 @@ curl http://127.0.0.1:19222/json/version
 | `CDP_PORT` | `9222` | Chrome DevTools Protocol port |
 | `CDP_BIND_ADDRESS` | `127.0.0.1` | Address socat binds to for CDP (see [Security](#security)) |
 | `CHROMIUM_FLAGS` | _(empty)_ | Additional Chromium flags (space-separated) |
-| `ENABLE_RDP` | `false` | Start PipeWire + gnome-remote-desktop for RDP access on port 3389 |
+| `ENABLE_RDP` | `true` | Start PipeWire + gnome-remote-desktop for RDP access on port 3389 |
+| `RDP_USERNAME` | `browser` | RDP username |
+| `RDP_PASSWORD` | `browser` | RDP password |
 
 ### Runtime Flag Overlay
 
@@ -157,7 +158,7 @@ container run -d \
 
 ## RDP Access
 
-Set `ENABLE_RDP=true` to start PipeWire, WirePlumber, and gnome-remote-desktop inside the container. This exposes an RDP server on port 3389 that you can connect to with any RDP client (e.g., Microsoft Remote Desktop).
+PipeWire, WirePlumber, and gnome-remote-desktop start by default, exposing an RDP server on port 3389. Connect with any RDP client (e.g., Microsoft Remote Desktop).
 
 ```bash
 container run -d \
@@ -167,13 +168,21 @@ container run -d \
   --publish 9222:9222 \
   --publish 3389:3389 \
   --tmpfs /dev/shm \
-  -e ENABLE_RDP=true \
   browser:latest
 ```
 
-Default RDP credentials: username `browser`, password `browser`.
+Default RDP credentials: username `browser`, password `browser`. Override with `RDP_USERNAME` / `RDP_PASSWORD` environment variables.
 
-When `ENABLE_RDP` is not set or set to `false` (the default), the RDP services are removed at startup and only CDP is available.
+To disable RDP and run CDP only, set `ENABLE_RDP=false`:
+
+```bash
+container run -d \
+  --name browser \
+  --publish 9222:9222 \
+  --tmpfs /dev/shm \
+  -e ENABLE_RDP=false \
+  browser:latest
+```
 
 ## Connecting
 

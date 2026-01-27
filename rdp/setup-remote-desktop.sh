@@ -1,11 +1,9 @@
 #!/bin/bash
 # setup-remote-desktop.sh — Build-time configuration for gnome-remote-desktop.
 #
-# Creates dconf settings, self-signed TLS certificates for RDP, and
-# credential files for RDP authentication.  Runs during container
-# image build (not at runtime).
-#
-# Default credentials:  RDP user "browser" password "browser"
+# Creates dconf settings and self-signed TLS certificates for RDP.
+# Runs during container image build (not at runtime).
+# Credentials are written at runtime by entrypoint.sh when RDP_PASSWORD is set.
 set -euo pipefail
 
 GRD_DIR="/home/browser/.local/share/gnome-remote-desktop"
@@ -43,15 +41,5 @@ DCONF
 dconf update
 
 # ---------------------------------------------------------------------------
-# Credentials — GKeyFile fallback (no GNOME Keyring / TPM in container)
+# Credentials — written at runtime by entrypoint.sh when RDP_PASSWORD is set
 # ---------------------------------------------------------------------------
-# The headless daemon reads credentials.ini (not grd-credentials.ini)
-# using GVariant format for the values.
-# RDP: username "browser", password "browser"
-cat > "$GRD_DIR/credentials.ini" <<'CREDS'
-[RDP]
-credentials={'username': <'browser'>, 'password': <'browser'>}
-CREDS
-
-chown browser:browser "$GRD_DIR/credentials.ini"
-chmod 600 "$GRD_DIR/credentials.ini"

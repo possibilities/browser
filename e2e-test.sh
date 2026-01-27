@@ -92,6 +92,7 @@ for i in $(seq 0 $(( NUM_CONTAINERS - 1 ))); do
         --publish "${port}:9222" \
         --tmpfs /dev/shm \
         -e CDP_BIND_ADDRESS=0.0.0.0 \
+        -e ENABLE_RDP=false \
         "$BASE_IMAGE"
 done
 
@@ -108,7 +109,6 @@ for i in $(seq 0 $(( NUM_CONTAINERS - 1 ))); do
         --publish "${rdp_port}:3389" \
         --tmpfs /dev/shm \
         -e CDP_BIND_ADDRESS=0.0.0.0 \
-        -e ENABLE_RDP=true \
         "$BASE_IMAGE"
 done
 

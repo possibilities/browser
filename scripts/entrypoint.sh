@@ -18,6 +18,18 @@ if [ "${ENABLE_RDP:-}" = "false" ]; then
 else
     # /dev/fuse is only needed for gnome-remote-desktop clipboard support
     chmod 666 /dev/fuse 2>/dev/null || true
+
+    # Write RDP credentials from env (default: browser/browser)
+    local_user="${RDP_USERNAME:-browser}"
+    local_pass="${RDP_PASSWORD:-browser}"
+    creds_file="/home/browser/.local/share/gnome-remote-desktop/credentials.ini"
+    cat > "$creds_file" <<CREDS
+[RDP]
+credentials={'username': <'${local_user}'>, 'password': <'${local_pass}'>}
+CREDS
+    chown browser:browser "$creds_file"
+    chmod 600 "$creds_file"
+    log "RDP credentials set (user=${local_user})"
 fi
 
 # ---- rebuild font cache for runtime-mounted fonts --------------------------
