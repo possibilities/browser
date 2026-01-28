@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
 // screencast.ts — Single-file CDP Screencast Viewer
-// Usage: bun screencast.ts [--port 3000]
+// Usage: bun [--port 3000] screencast.ts
 
-const PORT = parseInt(
-  Bun.argv.find((_, i, a) => a[i - 1] === "--port") ?? process.env.PORT ?? "3000",
-);
+function log(msg: string) {
+  const t = new Date().toISOString().slice(11, 23);
+  console.log(`${t}  ${msg}`);
+}
 
 // ── Container discovery ───────────────────────────────────────────────────────
 
@@ -16,12 +17,15 @@ async function getContainers() {
     });
     const text = await new Response(proc.stdout).text();
     const code = await proc.exited;
-    if (code !== 0 || !text.trim()) return [];
+    if (code !== 0 || !text.trim()) {
+      log(`container ls: exit=${code} (no output)`);
+      return [];
+    }
 
     const raw = JSON.parse(text);
     const list: any[] = Array.isArray(raw) ? raw : [raw];
 
-    return list
+    const results = list
       .filter((c) => String(c.status ?? "").toLowerCase() === "running")
       .filter((c) => {
         const ref = c.configuration?.image?.reference;
@@ -51,7 +55,10 @@ async function getContainers() {
           rdpPort: rdp?.hostPort ?? null,
         };
       });
-  } catch {
+    log(`containers: found ${results.length} browser (${list.length} total)`);
+    return results;
+  } catch (e: any) {
+    log(`containers: error: ${e?.message ?? e}`);
     return [];
   }
 }
@@ -547,25 +554,30 @@ const HTML = `<!DOCTYPE html>
 
 // ── HTTP + WebSocket server ───────────────────────────────────────────────────
 
-Bun.serve({
-  port: PORT,
-
+const server = Bun.serve({
   async fetch(req, server) {
     const url = new URL(req.url);
 
     // ── WebSocket upgrade for CDP proxy ──
     if (url.pathname === "/ws-proxy") {
       const target = url.searchParams.get("target");
-      if (!target) return new Response("Missing target param", { status: 400 });
+      if (!target) {
+        log("ws-proxy: missing target param");
+        return new Response("Missing target param", { status: 400 });
+      }
       if (server.upgrade(req, { data: { target, upstream: null as WebSocket | null, ready: false, buffer: [] as string[] } })) {
+        log(`ws-proxy: upgrade -> ${target}`);
         return undefined;
       }
+      log("ws-proxy: upgrade failed");
       return new Response("WebSocket upgrade failed", { status: 500 });
     }
 
     // ── API: list containers ──
     if (url.pathname === "/api/containers") {
-      return Response.json(await getContainers());
+      const containers = await getContainers();
+      log(`GET /api/containers -> ${containers.length} containers`);
+      return Response.json(containers);
     }
 
     // ── API: proxy CDP HTTP (avoids CORS) ──
@@ -573,16 +585,19 @@ Bun.serve({
       const host = url.searchParams.get("host") || "127.0.0.1";
       const port = url.searchParams.get("port") || "9222";
       const path = url.searchParams.get("path") || "/json";
+      const cdpUrl = `http://${host}:${port}${path}`;
       try {
-        const res = await fetch("http://" + host + ":" + port + path, {
+        const res = await fetch(cdpUrl, {
           signal: AbortSignal.timeout(3000),
         });
         const body = await res.text();
+        log(`GET /api/cdp-targets -> ${res.status} (${cdpUrl})`);
         return new Response(body, {
           status: res.status,
           headers: { "Content-Type": "application/json" },
         });
       } catch (e: any) {
+        log(`GET /api/cdp-targets -> 502 ${e?.message} (${cdpUrl})`);
         return Response.json({ error: e?.message ?? "CDP fetch failed" }, { status: 502 });
       }
     }
@@ -590,6 +605,7 @@ Bun.serve({
     // ── API: generate .rdp file for macOS Windows App ──
     if (url.pathname === "/api/rdp-file") {
       const port = url.searchParams.get("port") || "3389";
+      log(`GET /api/rdp-file -> port ${port}`);
       const rdp = [
         `full address:s:localhost:${port}`,
         `username:s:browser`,
@@ -612,11 +628,13 @@ Bun.serve({
   websocket: {
     open(ws) {
       const d = ws.data as any;
+      log(`ws: client connected, proxying to ${d.target}`);
       const upstream = new WebSocket(d.target);
       d.upstream = upstream;
 
       upstream.addEventListener("open", () => {
         d.ready = true;
+        log(`ws: upstream connected (${d.buffer.length} buffered)`);
         for (const msg of d.buffer) upstream.send(msg);
         d.buffer = [];
       });
@@ -626,10 +644,12 @@ Bun.serve({
       });
 
       upstream.addEventListener("close", () => {
+        log("ws: upstream closed");
         try { ws.close(); } catch {}
       });
 
       upstream.addEventListener("error", () => {
+        log("ws: upstream error");
         try { ws.close(); } catch {}
       });
     },
@@ -645,9 +665,10 @@ Bun.serve({
 
     close(ws) {
       const d = ws.data as any;
+      log("ws: client disconnected");
       try { d.upstream?.close(); } catch {}
     },
   },
 });
 
-console.log("Screencast \u2192 http://localhost:" + PORT);
+log("listening on http://localhost:" + server.port);
