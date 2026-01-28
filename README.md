@@ -1,4 +1,4 @@
-# browser-in-apple-container
+# browser
 
 Anti-detection Chromium container for [apple/container](https://github.com/apple/container) on Apple Silicon.
 
