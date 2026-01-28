@@ -18,7 +18,12 @@ RUN apt-get update && \
     fonts-liberation \
     fonts-noto-cjk \
     fonts-noto-color-emoji \
+    fonts-noto-core \
+    fonts-noto-extra \
+    fonts-noto-mono \
+    fonts-noto-ui-core \
     fonts-nanum \
+    fonts-firacode \
     fontconfig \
     # Utilities for process management and port forwarding
     procps \
