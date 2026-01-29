@@ -23,6 +23,7 @@ RUN apt-get update && \
     # Utilities for process management and port forwarding
     procps \
     socat \
+    tcpdump \
     jq \
     # RDP access (gnome-remote-desktop + PipeWire screen capture)
     gnome-remote-desktop \
@@ -69,7 +70,10 @@ COPY rdp/services/ /etc/supervisor/conf.d/services/
 # Scripts
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY scripts/chromium-launch.sh /usr/local/bin/chromium-launch.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/chromium-launch.sh
+COPY scripts/cdp-activity-monitor.sh /usr/local/bin/cdp-activity-monitor.sh
+COPY scripts/idle-reporter.sh /usr/local/bin/idle-reporter.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/chromium-launch.sh \
+    /usr/local/bin/cdp-activity-monitor.sh /usr/local/bin/idle-reporter.sh
 
 # Configure RDP: dconf settings, TLS certificates, credentials
 COPY rdp/setup-remote-desktop.sh /tmp/setup-remote-desktop.sh
