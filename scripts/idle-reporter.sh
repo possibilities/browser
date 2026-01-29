@@ -2,11 +2,17 @@
 set -euo pipefail
 
 # Monitors CDP activity and shuts down container after idle timeout.
-# Checks every second, prints every 10 seconds, kills after 10s idle.
+# Disabled by default. Set DESTROY_AFTER_IDLE_MS to enable.
 
 ACTIVITY_FILE="${CDP_ACTIVITY_FILE:-/run/cdp-activity}"
-IDLE_TIMEOUT_MS="${IDLE_TIMEOUT_MS:-10000}"
+IDLE_TIMEOUT_MS="${DESTROY_AFTER_IDLE_MS:-0}"
 PRINT_INTERVAL="${IDLE_PRINT_INTERVAL:-10}"
+
+# Exit if idle timeout is disabled
+if [ "$IDLE_TIMEOUT_MS" -eq 0 ]; then
+  echo "[idle-reporter] DESTROY_AFTER_IDLE_MS not set. Idle timeout disabled."
+  exit 0
+fi
 
 echo "[idle-reporter] Monitoring $ACTIVITY_FILE (timeout: ${IDLE_TIMEOUT_MS}ms, print every ${PRINT_INTERVAL}s)"
 
