@@ -32,6 +32,14 @@ CREDS
     log "RDP credentials set (user=${local_user})"
 fi
 
+# ---- set up host.container.internal DNS for host forwarding ----------------
+# Extract gateway IP from resolv.conf (the nameserver is the VM gateway)
+gateway_ip=$(awk '/^nameserver/ {print $2; exit}' /etc/resolv.conf)
+if [ -n "$gateway_ip" ]; then
+    log "Adding host.container.internal -> $gateway_ip to /etc/hosts"
+    echo "$gateway_ip host.container.internal" >> /etc/hosts
+fi
+
 # ---- rebuild font cache for runtime-mounted fonts --------------------------
 log "Rebuilding font cache..."
 fc-cache -f
