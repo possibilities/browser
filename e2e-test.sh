@@ -241,6 +241,52 @@ log "===== Testing RDP mode ====="
 run_page_tests "$RDP_PREFIX" "$RDP_CDP_PORT" "rdp"
 
 # ---------------------------------------------------------------------------
+# Host forwarding test (conditional - only runs if host DNS is configured)
+# ---------------------------------------------------------------------------
+HOST_FORWARD_SKIPPED=false
+if container system dns list 2>/dev/null | grep -q "host.container.internal"; then
+    log "===== Testing host forwarding ====="
+
+    # Start a simple HTTP server on the host (must match default HOST_FORWARD_PORT)
+    HOST_TEST_PORT=8080
+    echo "hello from host" > /tmp/host-test-index.html
+    python3 -m http.server "$HOST_TEST_PORT" --directory /tmp --bind 127.0.0.1 &
+    HOST_SERVER_PID=$!
+    trap "kill $HOST_SERVER_PID 2>/dev/null || true; rm -f /tmp/host-test-index.html" EXIT
+    sleep 1
+
+    # Use one of the existing test containers
+    name="${BASE_PREFIX}-0"
+    port="${BASE_CDP_PORT}"
+    session="host-forward-test"
+
+    agent-browser connect "$port" --session "$session"
+
+    TESTS_RUN=$(( TESTS_RUN + 1 ))
+    log "[${name}] Loading http://localhost:${HOST_TEST_PORT} (host forwarding) ..."
+
+    if agent-browser open "http://localhost:${HOST_TEST_PORT}/host-test-index.html" --session "$session" 2>&1; then
+        agent-browser wait 2000 --session "$session" 2>/dev/null || true
+        snapshot="$(agent-browser snapshot --session "$session" 2>/dev/null || echo "")"
+
+        if [[ "$snapshot" == *"hello from host"* ]]; then
+            pass "[${name}] Host forwarding works - content loaded from host"
+        else
+            fail "[${name}] Host forwarding failed - content not from host"
+            FAILURES=$(( FAILURES + 1 ))
+        fi
+    else
+        fail "[${name}] Failed to load localhost URL"
+        FAILURES=$(( FAILURES + 1 ))
+    fi
+
+    kill $HOST_SERVER_PID 2>/dev/null || true
+else
+    HOST_FORWARD_SKIPPED=true
+    log "===== Skipping host forwarding test (host.container.internal DNS not configured) ====="
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
@@ -248,6 +294,14 @@ log "=============================="
 log "  Tests run: ${TESTS_RUN}"
 log "  Failures:  ${FAILURES}"
 log "=============================="
+
+if [[ "$HOST_FORWARD_SKIPPED" == "true" ]]; then
+    echo ""
+    printf '\033[33m==============================\033[0m\n'
+    printf '\033[33m  HOST FORWARDING TEST SKIPPED\033[0m\n'
+    printf '\033[33m  Run: sudo container system dns create host.container.internal --localhost 203.0.113.113\033[0m\n'
+    printf '\033[33m==============================\033[0m\n'
+fi
 
 if (( FAILURES > 0 )); then
     fail "Some tests failed."
