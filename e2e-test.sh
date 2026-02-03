@@ -58,6 +58,9 @@ cleanup() {
             container delete "$name" 2>/dev/null || true
         done
     done
+    # Clean up host-forward test container
+    container stop "e2e-host-forward-test"   2>/dev/null || true
+    container delete "e2e-host-forward-test" 2>/dev/null || true
     log "Removing test images …"
     container image remove "$BASE_IMAGE" 2>/dev/null || true
     log "Cleanup complete."
@@ -247,17 +250,34 @@ HOST_FORWARD_SKIPPED=false
 if container system dns list 2>/dev/null | grep -q "host.container.internal"; then
     log "===== Testing host forwarding ====="
 
-    # Start a simple HTTP server on the host (must match default HOST_FORWARD_PORT)
-    HOST_TEST_PORT=8080
+    # Use a unique high port to avoid conflicts with existing services
+    HOST_TEST_PORT=19580
+    HOST_FORWARD_CDP_PORT=19422
+
     echo "hello from host" > /tmp/host-test-index.html
     python3 -m http.server "$HOST_TEST_PORT" --directory /tmp --bind 127.0.0.1 &
     HOST_SERVER_PID=$!
     trap "kill $HOST_SERVER_PID 2>/dev/null || true; rm -f /tmp/host-test-index.html" EXIT
     sleep 1
 
-    # Use one of the existing test containers
-    name="${BASE_PREFIX}-0"
-    port="${BASE_CDP_PORT}"
+    # Start a dedicated container configured with our test port for host forwarding
+    name="e2e-host-forward-test"
+    log "Starting host-forward test container ${name} (CDP ${HOST_FORWARD_CDP_PORT}) ..."
+    container run -d \
+        --name "$name" \
+        --cpus "$CONTAINER_CPUS" \
+        --memory "$CONTAINER_MEMORY" \
+        --publish "${HOST_FORWARD_CDP_PORT}:9222" \
+        --tmpfs /dev/shm \
+        -e CDP_BIND_ADDRESS=0.0.0.0 \
+        -e ENABLE_RDP=false \
+        -e HOST_FORWARD_PORT="$HOST_TEST_PORT" \
+        "$BASE_IMAGE"
+
+    # Wait for CDP to be ready
+    wait_for_cdp "$HOST_FORWARD_CDP_PORT" "$name"
+
+    port="$HOST_FORWARD_CDP_PORT"
     session="host-forward-test"
 
     agent-browser connect "$port" --session "$session"
