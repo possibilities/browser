@@ -255,7 +255,7 @@ if container system dns list 2>/dev/null | grep -q "host.container.internal"; th
     HOST_FORWARD_CDP_PORT=19422
 
     echo "hello from host" > /tmp/host-test-index.html
-    python3 -m http.server "$HOST_TEST_PORT" --directory /tmp --bind 127.0.0.1 &
+    python3 -m http.server "$HOST_TEST_PORT" --directory /tmp --bind 0.0.0.0 &
     HOST_SERVER_PID=$!
     trap "kill $HOST_SERVER_PID 2>/dev/null || true; rm -f /tmp/host-test-index.html" EXIT
     sleep 1
