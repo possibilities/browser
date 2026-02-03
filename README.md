@@ -1,5 +1,7 @@
 # browser
 
+> **Note:** This project has moved to a different repository (currently private). This repo is no longer being maintained, but the code works well as-is.
+
 Anti-detection Chromium container for [apple/container](https://github.com/apple/container) on Apple Silicon.
 
 ## Requirements
